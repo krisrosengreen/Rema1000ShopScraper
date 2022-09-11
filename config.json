@@ -1,0 +1,7 @@
+{
+    "main_page_contents": "https://cphapp.rema1000.dk/api/v1/catalog/store/1/departments-v2",
+    "general_department_url": "https://flwdn2189e-dsn.algolia.net/1/indexes/*/queries?x-algolia-agent=Algolia%20for%20vanilla%20JavaScript%203.21.1&x-algolia-application-id=FLWDN2189E&x-algolia-api-key=fa20981a63df668e871a87a8fbd0caed",
+    "query_template": "query=&hitsPerPage=20&facets=%5B%22labels%22%5D&facetFilters=%5B%22department_id%3A{}%22%2C%22category_id%3A{}%22%5D&filters=",
+    "items_filename": "gathered_items.json",
+    "requests_latency": 3600
+}
