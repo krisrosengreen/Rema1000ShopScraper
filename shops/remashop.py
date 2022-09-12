@@ -5,6 +5,7 @@ from colorama import init
 import os
 import time
 
+
 class Rema:
     def __init__(self):
         init()
@@ -18,8 +19,7 @@ class Rema:
         main_page_req = requests.get(main_page_contents)
         self.main_page_req_json = json.loads(main_page_req.text)
         self.gen_req_format = {"indexName": "aws-prod-products", "params": ""}
-        self.items_price_per_kilo = {}
-        self.items_price_per_percentage_discount = {}
+        self.items_all = {"items_ppkg": {}, "items_ppdiscount": {}}
 
     def getDepartmentParams(self, department_id, category_id):
         return self.config["query_template"].format(department_id, category_id)
@@ -67,18 +67,18 @@ class Rema:
         elif value <= 100:
             return colored(str(value), 'green')
 
-    def saveItems(self, items_ppkg, items_ppdiscount):
-        dict_save = {"items_ppkg": items_ppkg,
-                     "items_ppdiscount": items_ppdiscount}
+    def saveItems(self):
         with open(self.items_filename, "w") as file:
-            file.write(json.dumps(dict_save))
+            file.write(json.dumps(self.items_all))
 
     def loadItems(self):
         with open(self.items_filename, "r") as file:
-            items_all = json.load(file)
+            self.items_all = json.load(file)
 
-            self.setItemsPricePerKilo(items_all["items_ppkg"])
-            self.setItemsPricePerPercentageDiscount(items_all["items_ppdiscount"])
+    def showGatheredItems(self, n_items, type_processing, sort_by, dep_filter):
+        attr_name = f"show_{type_processing}"
+        if hasattr(self, attr_name):
+            getattr(self, f"show_{type_processing}")(n_items, sort_by)
 
     def gatherItems(self, n_items, type_processing, sort_by, dep_filter):
         print("Getting items...")
@@ -88,8 +88,7 @@ class Rema:
             for i in self.main_page_req_json:
                 self.getDepartmentCategories(
                     i, dep_filter, type_processing)
-            self.saveItems(self.items_price_per_kilo,
-                            self.items_price_per_percentage_discount)
+            self.saveItems()
 
         if os.path.exists(self.items_filename):
             if time.time() - os.path.getmtime(self.items_filename) > self.config["requests_latency"]:
@@ -99,13 +98,8 @@ class Rema:
         else:
             fetch()
 
-        attr_name = f"show_{type_processing}"
-        if hasattr(self, attr_name):
-            getattr(self, f"show_{type_processing}")(n_items, sort_by)
-
     def show_dscnt(self, n_items, sort_by):
-        items_price_per_percentage_discount = self.getItemsPricePerPercentageDiscount()
-        sort_items = sorted(items_price_per_percentage_discount.items(
+        sort_items = sorted(self.items_all["items_ppdiscount"].items(
         ), key=lambda x: x[1][sort_by], reverse=True)
 
         for i in sort_items:
@@ -121,9 +115,7 @@ class Rema:
             print("-"*120)
 
     def show_ppkg(self, n_items, sort_by):
-        items_price_per_kilo = self.getItemsPricePerKilo()
-
-        sort_items = sorted(items_price_per_kilo.items(),
+        sort_items = sorted(self.items_all["items_ppkg"].items(),
                             key=lambda x: x[1]["ippk"])
 
         fmt = "{dp:s}\t{v:s}\t{f1:s}\n"
@@ -160,7 +152,7 @@ class Rema:
         item_price_per_kilo = float(
             price_per_unit.split(" ")[0].replace(',', ''))
         department_name = hit["department_name"]
-        self.items_price_per_kilo[hit["name"]] = {
+        self.items_all["items_ppkg"][hit["name"]] = {
             "ippk": item_price_per_kilo, "d_n": department_name}
 
     def processing_dscnt(self, hit, dep_filter):
@@ -173,12 +165,12 @@ class Rema:
 
             ppc = self.pricePerCalorie(hit)
             percentage_discount = int(round((np-p)/np*100, 0))
-            self.items_price_per_percentage_discount[hit["name"]] = {
+            self.items_all["items_ppdiscount"][hit["name"]] = {
                 "d_n": hit["department_name"], "cp": p, "np": np, "p_dscnt": percentage_discount, "ppc": ppc}
 
     def pricePerCalorie(self, hit):
         calories = self.getInt(hit["nutrition_info"][0]
-                          ["value"].split("/")[1].strip().split(" "))
+                               ["value"].split("/")[1].strip().split(" "))
         cp = hit["pricing"]["price"]
         calories_per_price = round(calories/cp, 1)
 
@@ -195,15 +187,3 @@ class Rema:
         for i in lot:
             if self.RepresentsInt(i):
                 return int(i)
-
-    def getItemsPricePerKilo(self):
-        return self.items_price_per_kilo
-
-    def getItemsPricePerPercentageDiscount(self):
-        return self.items_price_per_percentage_discount
-
-    def setItemsPricePerKilo(self, items_ppkg):
-        self.items_price_per_kilo = items_ppkg
-
-    def setItemsPricePerPercentageDiscount(self, items_ppdiscount):
-        self.items_price_per_percentage_discount = items_ppdiscount

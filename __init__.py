@@ -34,6 +34,8 @@ def main():
         rema = remashop.Rema()
         rema.gatherItems(args.num_items, args.type_processing,
                          args.sort_by, dep_filter)
+        rema.showGatheredItems(
+            args.num_items, args.type_processing, args.sort_by, dep_filter)
 
 
 if __name__ == "__main__":
