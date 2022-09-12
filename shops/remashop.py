@@ -21,7 +21,7 @@ class Rema:
         self.gen_req_format = {"indexName": "aws-prod-products", "params": ""}
         self.items_all = {"items_ppkg": {}, "items_ppdiscount": {}}
         self.dep_filter = ["Husholdning", "Pers. pleje",
-                  "Baby og småbørn", "Kiosk", "Drikkevarer"]
+                           "Baby og småbørn", "Kiosk", "Drikkevarer"]
 
     def getDepartmentParams(self, department_id, category_id):
         return self.config["query_template"].format(department_id, category_id)
