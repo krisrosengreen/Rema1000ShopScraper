@@ -1,6 +1,7 @@
 import argparse
 from shops import remashop
 
+rema = remashop.Rema()
 
 def main():
     parser = argparse.ArgumentParser()
@@ -31,7 +32,6 @@ def main():
             dep_filter.append(filters[filter_code])
 
     if args.shop == "rema":
-        rema = remashop.Rema()
         rema.gatherItems(args.num_items, args.type_processing,
                          args.sort_by, dep_filter)
         rema.showGatheredItems(

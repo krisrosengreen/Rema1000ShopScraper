@@ -24,6 +24,10 @@ class Rema:
     def getDepartmentParams(self, department_id, category_id):
         return self.config["query_template"].format(department_id, category_id)
 
+    def getConfig(self):
+        with open("config.json", "r") as f:
+            return json.load(f)["Rema1000"]
+
     def getDepartmentCategories(self, department_data, dep_filter, type_processing):
         dep_id = department_data["id"]
         categories = department_data["categories"]
@@ -42,7 +46,12 @@ class Rema:
         request_category_json = json.loads(request_category.text)
         request_category_json_results = request_category_json["results"]
 
-        for section_data in request_category_json_results:
+        self.processRaw(request_category_json_results,
+                        type_processing, dep_filter)
+        return request_category_json_results
+
+    def processRaw(self, items_raw, type_processing, dep_filter):
+        for section_data in items_raw:
             for hit in section_data["hits"]:
                 attr_name = f"processing_{type_processing}"
                 if hasattr(self, attr_name):
@@ -67,13 +76,16 @@ class Rema:
         elif value <= 100:
             return colored(str(value), 'green')
 
-    def saveItems(self):
+    def saveItems(self, items_raw):
         with open(self.items_filename, "w") as file:
-            file.write(json.dumps(self.items_all))
+            file.write(json.dumps(items_raw, indent=4))
+        print("Items saved..." + "\n"*3)
 
-    def loadItems(self):
+    def loadItems(self, type_processing, dep_filter):
         with open(self.items_filename, "r") as file:
-            self.items_all = json.load(file)
+            items_raw = json.load(file)
+            self.processRaw(items_raw, type_processing, dep_filter)
+        print("Items loaded..." + "\n"*3)
 
     def showGatheredItems(self, n_items, type_processing, sort_by, dep_filter):
         attr_name = f"show_{type_processing}"
@@ -81,20 +93,21 @@ class Rema:
             getattr(self, f"show_{type_processing}")(n_items, sort_by)
 
     def gatherItems(self, n_items, type_processing, sort_by, dep_filter):
-        print("Getting items...")
-        print("\n"*3)
+        print("Getting items..."+"\n"*3)
 
         def fetch():
+            all_hits = []
             for i in self.main_page_req_json:
-                self.getDepartmentCategories(
+                hits = self.getDepartmentCategories(
                     i, dep_filter, type_processing)
-            self.saveItems()
+                all_hits = all_hits + hits
+            self.saveItems(all_hits)
 
         if os.path.exists(self.items_filename):
             if time.time() - os.path.getmtime(self.items_filename) > self.config["requests_latency"]:
                 fetch()
             else:
-                self.loadItems()
+                self.loadItems(type_processing, dep_filter)
         else:
             fetch()
 
@@ -132,13 +145,22 @@ class Rema:
             print(fmt.format(dp=i[1]["d_n"].ljust(20, ' ')+"  |",
                              v=i[0].ljust(40, ' '), f1=str(i[1]["ippk"])))
 
-    # From dataprocessing file
     def checkStringForFilter(self, str, filter):
         for i in filter:
             if i in str:
                 return True
 
         return False
+
+    def usefulHitInfo(self, hit):
+        p = hit["pricing"]["price"]
+        np = hit["pricing"]["normal_price"]
+
+        ppc = self.pricePerCalorie(hit)
+        percentage_discount = int(round((np-p)/np*100, 0))
+        department_name = hit["department_name"]
+
+        return {"d_n": department_name, "cp": p, "np": np, "ppc": ppc, "p_dscnt": percentage_discount}
 
     def processing_ppkg(self, hit, dep_filter):
         price_per_unit = hit["pricing"]["price_per_unit"]
@@ -151,28 +173,28 @@ class Rema:
 
         item_price_per_kilo = float(
             price_per_unit.split(" ")[0].replace(',', ''))
-        department_name = hit["department_name"]
-        self.items_all["items_ppkg"][hit["name"]] = {
-            "ippk": item_price_per_kilo, "d_n": department_name}
+        hit_info = self.usefulHitInfo(hit)
+        hit_info["ippk"] = item_price_per_kilo
+
+        self.items_all["items_ppkg"][hit["name"]] = hit_info
 
     def processing_dscnt(self, hit, dep_filter):
         if self.checkStringForFilter(hit["department_name"], dep_filter):
             return
 
         if hit["pricing"]["is_on_discount"]:
-            p = hit["pricing"]["price"]
-            np = hit["pricing"]["normal_price"]
-
-            ppc = self.pricePerCalorie(hit)
-            percentage_discount = int(round((np-p)/np*100, 0))
-            self.items_all["items_ppdiscount"][hit["name"]] = {
-                "d_n": hit["department_name"], "cp": p, "np": np, "p_dscnt": percentage_discount, "ppc": ppc}
+            hit_info = self.usefulHitInfo(hit)
+            self.items_all["items_ppdiscount"][hit["name"]] = hit_info
 
     def pricePerCalorie(self, hit):
-        calories = self.getInt(hit["nutrition_info"][0]
-                               ["value"].split("/")[1].strip().split(" "))
-        cp = hit["pricing"]["price"]
-        calories_per_price = round(calories/cp, 1)
+
+        try:
+            calories = self.getInt(hit["nutrition_info"][0]
+                                   ["value"].split("/")[1].strip().split(" "))
+            cp = hit["pricing"]["price"]
+            calories_per_price = round(calories/cp, 1)
+        except:
+            return -1
 
         return calories_per_price
 
