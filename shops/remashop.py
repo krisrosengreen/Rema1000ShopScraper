@@ -20,6 +20,8 @@ class Rema:
         self.main_page_req_json = json.loads(main_page_req.text)
         self.gen_req_format = {"indexName": "aws-prod-products", "params": ""}
         self.items_all = {"items_ppkg": {}, "items_ppdiscount": {}}
+        self.dep_filter = ["Husholdning", "Pers. pleje",
+                  "Baby og småbørn", "Kiosk", "Drikkevarer"]
 
     def getDepartmentParams(self, department_id, category_id):
         return self.config["query_template"].format(department_id, category_id)
@@ -28,7 +30,7 @@ class Rema:
         with open("config.json", "r") as f:
             return json.load(f)["Rema1000"]
 
-    def getDepartmentCategories(self, department_data, dep_filter, type_processing):
+    def getDepartmentCategories(self, department_data, type_processing):
         dep_id = department_data["id"]
         categories = department_data["categories"]
         requests_data_form = {"requests": []}
@@ -47,18 +49,23 @@ class Rema:
         request_category_json_results = request_category_json["results"]
 
         self.processRaw(request_category_json_results,
-                        type_processing, dep_filter)
+                        type_processing)
         return request_category_json_results
 
-    def processRaw(self, items_raw, type_processing, dep_filter):
+    def processRaw(self, items_raw, type_processing):
         for section_data in items_raw:
             for hit in section_data["hits"]:
                 attr_name = f"processing_{type_processing}"
                 if hasattr(self, attr_name):
-                    getattr(self, attr_name)(hit, dep_filter)
+                    getattr(self, attr_name)(hit)
                 else:
                     print("Unknown processing method...")
                     exit()
+
+    def appendFilters(self, filters):
+        for filter in filters:
+            if filter not in self.dep_filter:
+                self.dep_filter.append(filter)
 
     def padString(self, str, l):
         return str.ljust(l, ' ')
@@ -81,25 +88,25 @@ class Rema:
             file.write(json.dumps(items_raw, indent=4))
         print("Items saved..." + "\n"*3)
 
-    def loadItems(self, type_processing, dep_filter):
+    def loadItems(self, type_processing):
         with open(self.items_filename, "r") as file:
             items_raw = json.load(file)
-            self.processRaw(items_raw, type_processing, dep_filter)
+            self.processRaw(items_raw, type_processing)
         print("Items loaded..." + "\n"*3)
 
-    def showGatheredItems(self, n_items, type_processing, sort_by, dep_filter):
+    def showGatheredItems(self, n_items, type_processing, sort_by):
         attr_name = f"show_{type_processing}"
         if hasattr(self, attr_name):
             getattr(self, f"show_{type_processing}")(n_items, sort_by)
 
-    def gatherItems(self, n_items, type_processing, sort_by, dep_filter):
+    def gatherItems(self, n_items, type_processing, sort_by):
         print("Getting items..."+"\n"*3)
 
         def fetch():
             all_hits = []
             for i in self.main_page_req_json:
                 hits = self.getDepartmentCategories(
-                    i, dep_filter, type_processing)
+                    i, type_processing)
                 all_hits = all_hits + hits
             self.saveItems(all_hits)
 
@@ -107,7 +114,7 @@ class Rema:
             if time.time() - os.path.getmtime(self.items_filename) > self.config["requests_latency"]:
                 fetch()
             else:
-                self.loadItems(type_processing, dep_filter)
+                self.loadItems(type_processing)
         else:
             fetch()
 
@@ -162,13 +169,13 @@ class Rema:
 
         return {"d_n": department_name, "cp": p, "np": np, "ppc": ppc, "p_dscnt": percentage_discount}
 
-    def processing_ppkg(self, hit, dep_filter):
+    def processing_ppkg(self, hit):
         price_per_unit = hit["pricing"]["price_per_unit"]
 
         if "per Kg." not in price_per_unit and "per Ltr." not in price_per_unit:
             return
 
-        if self.checkStringForFilter(hit["department_name"], dep_filter):
+        if self.checkStringForFilter(hit["department_name"], self.dep_filter):
             return
 
         item_price_per_kilo = float(
@@ -178,8 +185,8 @@ class Rema:
 
         self.items_all["items_ppkg"][hit["name"]] = hit_info
 
-    def processing_dscnt(self, hit, dep_filter):
-        if self.checkStringForFilter(hit["department_name"], dep_filter):
+    def processing_dscnt(self, hit):
+        if self.checkStringForFilter(hit["department_name"], self.dep_filter):
             return
 
         if hit["pricing"]["is_on_discount"]:

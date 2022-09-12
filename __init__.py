@@ -18,9 +18,6 @@ def main():
     parser.add_argument(
         "--filter", type=str, help='Departments to filter out of the data (Codes seperated by comma; Standard is all of them): ["a": "Husholdning", "b": "Pers. pleje", "c": "Baby og småbørn", "d": "Kiosk", "e": "Drikkevarer"]')
 
-    dep_filter = ["Husholdning", "Pers. pleje",
-                  "Baby og småbørn", "Kiosk", "Drikkevarer"]
-
     args = parser.parse_args()
 
     if args.filter is not None:
@@ -31,11 +28,13 @@ def main():
         for filter_code in found_filters:
             dep_filter.append(filters[filter_code])
 
+        rema.appendFilters(dep_filter)
+
     if args.shop == "rema":
         rema.gatherItems(args.num_items, args.type_processing,
-                         args.sort_by, dep_filter)
+                         args.sort_by)
         rema.showGatheredItems(
-            args.num_items, args.type_processing, args.sort_by, dep_filter)
+            args.num_items, args.type_processing, args.sort_by)
 
 
 if __name__ == "__main__":
