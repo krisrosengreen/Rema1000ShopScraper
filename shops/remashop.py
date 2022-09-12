@@ -5,13 +5,12 @@ from colorama import init
 import os
 import time
 
-
 class Rema:
     def __init__(self):
         init()
 
         with open("config.json", "r") as f:
-            self.config = json.load(f)
+            self.config = json.load(f)["Rema1000"]
 
         self.items_filename = self.config["items_filename"]
         main_page_contents = self.config["main_page_contents"]
@@ -45,10 +44,9 @@ class Rema:
 
         for section_data in request_category_json_results:
             for hit in section_data["hits"]:
-                if type_processing == "ppkg":
-                    self.processByPricePerKilo(hit, dep_filter)
-                elif type_processing == "dscnt":
-                    self.processByDiscount(hit, dep_filter)
+                attr_name = f"processing_{type_processing}"
+                if hasattr(self, attr_name):
+                    getattr(self, attr_name)(hit, dep_filter)
                 else:
                     print("Unknown processing method...")
                     exit()
@@ -82,34 +80,30 @@ class Rema:
             self.setItemsPricePerKilo(items_all["items_ppkg"])
             self.setItemsPricePerPercentageDiscount(items_all["items_ppdiscount"])
 
-    def gatherItems(self, n_items, type_processing, sort_by):
-        dep_filter = ["Husholdning", "Pers. pleje",
-                      "Baby og småbørn", "Kiosk", "Drikkevarer"]
-
+    def gatherItems(self, n_items, type_processing, sort_by, dep_filter):
         print("Getting items...")
         print("\n"*3)
 
+        def fetch():
+            for i in self.main_page_req_json:
+                self.getDepartmentCategories(
+                    i, dep_filter, type_processing)
+            self.saveItems(self.items_price_per_kilo,
+                            self.items_price_per_percentage_discount)
+
         if os.path.exists(self.items_filename):
             if time.time() - os.path.getmtime(self.items_filename) > self.config["requests_latency"]:
-                for i in self.main_page_req_json:
-                    self.getDepartmentCategories(
-                        i, dep_filter, type_processing)
-                self.saveItems(self.items_price_per_kilo,
-                               self.items_price_per_percentage_discount)
+                fetch()
             else:
                 self.loadItems()
         else:
-            for i in self.main_page_req_json:
-                self.getDepartmentCategories(i, dep_filter, type_processing)
-            self.saveItems(self.items_price_per_kilo,
-                           self.items_price_per_percentage_discount)
+            fetch()
 
-        if type_processing == "ppkg":
-            self.showPricePerKilo(n_items)
-        elif type_processing == "dscnt":
-            self.showPricePerPercentageDiscount(sort_by)
+        attr_name = f"show_{type_processing}"
+        if hasattr(self, attr_name):
+            getattr(self, f"show_{type_processing}")(n_items, sort_by)
 
-    def showPricePerPercentageDiscount(self, sort_by):
+    def show_dscnt(self, n_items, sort_by):
         items_price_per_percentage_discount = self.getItemsPricePerPercentageDiscount()
         sort_items = sorted(items_price_per_percentage_discount.items(
         ), key=lambda x: x[1][sort_by], reverse=True)
@@ -126,7 +120,7 @@ class Rema:
                   self.padString(str(np), 5)+"\t"+"ppc: "+self.padString(str(ppc), 10)+"\t pdc: " + self.colorTextByPercentage(p_dscnt))
             print("-"*120)
 
-    def showPricePerKilo(self, n_items):
+    def show_ppkg(self, n_items, sort_by):
         items_price_per_kilo = self.getItemsPricePerKilo()
 
         sort_items = sorted(items_price_per_kilo.items(),
@@ -147,7 +141,6 @@ class Rema:
                              v=i[0].ljust(40, ' '), f1=str(i[1]["ippk"])))
 
     # From dataprocessing file
-
     def checkStringForFilter(self, str, filter):
         for i in filter:
             if i in str:
@@ -155,7 +148,7 @@ class Rema:
 
         return False
 
-    def processByPricePerKilo(self, hit, dep_filter):
+    def processing_ppkg(self, hit, dep_filter):
         price_per_unit = hit["pricing"]["price_per_unit"]
 
         if "per Kg." not in price_per_unit and "per Ltr." not in price_per_unit:
@@ -170,7 +163,7 @@ class Rema:
         self.items_price_per_kilo[hit["name"]] = {
             "ippk": item_price_per_kilo, "d_n": department_name}
 
-    def processByDiscount(self, hit, dep_filter):
+    def processing_dscnt(self, hit, dep_filter):
         if self.checkStringForFilter(hit["department_name"], dep_filter):
             return
 
